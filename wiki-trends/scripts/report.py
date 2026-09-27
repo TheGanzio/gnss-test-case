@@ -11,6 +11,27 @@ from .analyze import SeriesStats
 
 FONT_DIR = Path(__file__).resolve().parent.parent / "assets" / "fonts"
 
+# We manage page breaks ourselves (auto_page_break is off) because the table
+# rows below use manual set_xy() bookkeeping that isn't safe to interrupt
+# mid-row with fpdf2's automatic break. Instead we check remaining space
+# *before* starting a row/block and start a fresh page if it won't fit —
+# this is what stops rows from silently overflowing past the bottom of the
+# page (see tests/test_report_smoke.py::test_many_languages_do_not_lose_rows,
+# which exists specifically because an earlier version of this function
+# silently dropped every language past roughly the 10th in a comparison).
+BOTTOM_RESERVE_MM = 12
+
+
+def _ensure_space(pdf: FPDF, needed_mm: float, table_headers: list[tuple[float, str]] | None = None) -> None:
+    if pdf.get_y() + needed_mm <= pdf.h - BOTTOM_RESERVE_MM:
+        return
+    pdf.add_page()
+    if table_headers:
+        pdf.set_font("DejaVu", "B", 10)
+        for w, h in table_headers:
+            pdf.cell(w, 6, h, border=1)
+        pdf.ln()
+
 
 def _block_multicell(pdf: FPDF, h: float, text: str) -> None:
     """multi_cell(w=0, ...) that returns the cursor to the left margin
@@ -86,7 +107,8 @@ def build_report(
     pdf.set_font("DejaVu", "B", 10)
     col_w = [16, 20, 20, 26, 26, 70]  # sums to 178mm, fits inside A4 minus 14mm margins
     headers = ["Lang", "Growth", "Trend fit", "Start (ppm)", "End (ppm)", "Confidence & why"]
-    for w, h in zip(col_w, headers):
+    header_cells = list(zip(col_w, headers))
+    for w, h in header_cells:
         pdf.cell(w, 6, h, border=1)
     pdf.ln()
 
@@ -104,6 +126,15 @@ def build_report(
             share_end,
             f"{s.confidence}: {reason}",
         ]
+
+        # Reserve enough room for a worst-case-ish wrapped reason line
+        # (conservative: real reason strings wrap to at most a handful of
+        # lines at this column width) so a row never starts somewhere it
+        # can't finish.
+        approx_lines = max(1, len(row[-1]) // 38 + 1)
+        _ensure_space(pdf, approx_lines * 4 + 2, table_headers=header_cells)
+        pdf.set_font("DejaVu", "", 8)
+
         y_before = pdf.get_y()
         x = pdf.get_x()
         x_last = x + sum(col_w[:-1])
@@ -117,6 +148,7 @@ def build_report(
         pdf.set_xy(x, y_after)
 
     if unresolved_langs:
+        _ensure_space(pdf, 10)
         pdf.set_font("DejaVu", "I", 8)
         pdf.set_text_color(150, 60, 0)
         _block_multicell(
@@ -127,18 +159,24 @@ def build_report(
         pdf.set_text_color(0, 0, 0)
 
     pdf.ln(1)
+    _ensure_space(pdf, 14)
     pdf.set_font("DejaVu", "B", 10)
     pdf.cell(0, 6, "Assumptions & limitations", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     pdf.set_font("DejaVu", "", 8)
     for a in GLOBAL_ASSUMPTIONS:
+        _ensure_space(pdf, max(1, len(a) // 90 + 1) * 4 + 1)
+        pdf.set_font("DejaVu", "", 8)
         _block_multicell(pdf, 4, f"- {a}")
 
     if next_steps:
         pdf.ln(1)
+        _ensure_space(pdf, 14)
         pdf.set_font("DejaVu", "B", 10)
         pdf.cell(0, 6, "Suggested next steps", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         pdf.set_font("DejaVu", "", 8)
         for n in next_steps:
+            _ensure_space(pdf, max(1, len(n) // 90 + 1) * 4 + 1)
+            pdf.set_font("DejaVu", "", 8)
             _block_multicell(pdf, 4, f"- {n}")
 
     out_path = Path(out_path)
