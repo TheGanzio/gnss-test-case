@@ -71,7 +71,8 @@ ANTHROPIC_API_KEY=sk-ant-... python3 tests/live/run_live_test.py "<question>"
 ### What I checked in the transcripts (not just "it ran")
 
 Saved transcripts: `tests/live/transcript_1_astronomy_uk.md`,
-`tests/live/transcript_2_fasting_pl_cs.md`.
+`tests/live/transcript_2_fasting_pl_cs.md`,
+`tests/live/transcript_3_stalker2_uk_de.md`.
 
 For each run I cross-checked the model's final Ukrainian answer against the
 raw JSON the CLI actually returned, specifically:
@@ -98,11 +99,21 @@ raw JSON the CLI actually returned, specifically:
   retries needed, on `claude-haiku-4-5-20251001`, which is the point of the
   "must work on a fast/cheap model" requirement.
 - **Cost/efficiency**: run 1 used 5719 input / 620 output tokens, run 2
-  used 5687 input / 506 output tokens, in a single tool-call round trip
-  each. Input tokens are dominated by `SKILL.md` itself (loaded once per
-  conversation by a real agent runtime, not per turn), not by data dumped
-  from the CLI — the CLI intentionally returns a compact summary JSON
-  instead of raw daily pageview series for exactly this reason.
+  used 5687 input / 506 output tokens, run 3 used 5802 input / 619 output
+  tokens, in a single tool-call round trip each. Input tokens are dominated
+  by `SKILL.md` itself (loaded once per conversation by a real agent
+  runtime, not per turn), not by data dumped from the CLI — the CLI
+  intentionally returns a compact summary JSON instead of raw daily
+  pageview series for exactly this reason.
+- **Run 3 (ad hoc, not from the task brief's examples)** asked about
+  "Stalker 2" — a colloquial name, not a Wikipedia article title. The model
+  resolved it to the correct canonical title
+  (`S.T.A.L.K.E.R. 2: Heart of Chornobyl`) itself, without being told the
+  exact title, and correctly used the normalized ppm share (not just the
+  growth %) to point out that Ukrainian Wikipedia's audience share for the
+  topic is far larger than German's despite German having the bigger raw
+  growth percentage — showing the model engaged with *why* the normalized
+  metric exists, not just repeating numbers.
 
 ## Known limitation of this test
 
